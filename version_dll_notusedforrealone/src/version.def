@@ -1,0 +1,25 @@
+LIBRARY "VERSION"
+EXPORTS
+
+GetFileVersionInfoA	= _GetFileVersionInfoA
+GetFileVersionInfoByHandle = _GetFileVersionInfoByHandle
+GetFileVersionInfoExA = _GetFileVersionInfoExA
+GetFileVersionInfoExW = _GetFileVersionInfoExW
+GetFileVersionInfoSizeA = _GetFileVersionInfoSizeA
+GetFileVersionInfoSizeExA = _GetFileVersionInfoSizeExA
+GetFileVersionInfoSizeExW = _GetFileVersionInfoSizeExW
+GetFileVersionInfoSizeW = _GetFileVersionInfoSizeW
+GetFileVersionInfoW = _GetFileVersionInfoW
+VerFindFileA = _VerFindFileA
+VerFindFileW = _VerFindFileW
+VerInstallFileA = _VerInstallFileA
+VerInstallFileW = _VerInstallFileW
+VerLanguageNameA = _VerLanguageNameA
+VerLanguageNameW = _VerLanguageNameW
+VerQueryValueA = _VerQueryValueA
+VerQueryValueW = _VerQueryValueW
+VerQueryValueIndexA = _VerQueryValueIndexA
+VerQueryValueIndexW = _VerQueryValueIndexW
+dbkFCallWrapperAddr = _dbkFCallWrapperAddr
+__dbk_fcall_wrapper = ___dbk_fcall_wrapper
+TMethodImplmentationIntercept = _TMethodImplmentationIntercept
