@@ -11,7 +11,7 @@
 #include <intrin.h>
 #include <winternl.h>
 #include <sstream>
-
+#include "Ghost.h"
 DWORD64 dwVersion1DLL = 0;
 
 extern "C" uint64_t GetRdiValue();
@@ -291,15 +291,16 @@ static BOOL InstallHook(LPCSTR dll, LPCSTR function, LPVOID* originalFunction, L
 	return false;
 }
 
-void Hook()
+void Hook(HMODULE hModule)
 {
 	DetourTransactionBegin();
 	DetourUpdateThread(GetCurrentThread());
+
+	Validate(hModule);
 
 	//InstallHook("kernel32.dll", "IsDebuggerPresent", (LPVOID*)& pOrigIsDebuggerPresent, MyIsDebuggerPresent);
 	InstallHook("kernel32.dll", "GetProcAddress", (LPVOID*)&TrueGetProcAddress, DetourGetProcAddress);
 	InstallHook("kernel32.dll", "DeviceIoControl", (LPVOID*)&OriginalDeviceIoControl, MyDeviceIoControl);
 	InstallHook("Advapi32.dll", "RegQueryValueExA", (LPVOID*)&TrueRegQueryValueExA, DetourRegQueryValueExA);
-
 	DetourTransactionCommit();
 }

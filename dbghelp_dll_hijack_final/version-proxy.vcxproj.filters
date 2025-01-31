@@ -16,6 +16,9 @@
     <ClCompile Include="Hook.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="Ghost.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\version.def">
@@ -32,10 +35,17 @@
     <ClInclude Include="detours.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="Ghost.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="src\get_rsp.asm">
       <Filter>src</Filter>
     </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="version-proxy.rc" />
   </ItemGroup>
 </Project>

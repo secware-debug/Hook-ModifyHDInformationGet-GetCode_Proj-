@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Ghost.cpp" />
     <ClCompile Include="Hook.cpp" />
     <ClCompile Include="src\dllmain.cpp" />
     <ClCompile Include="src\version.cpp" />
@@ -33,8 +34,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="detours.h" />
+    <ClInclude Include="Ghost.h" />
     <ClInclude Include="Hook.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="src\version.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="version-proxy.rc" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -102,6 +108,8 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <TargetName>dbghelp</TargetName>
+    <IncludePath>.\openssl\include;$(IncludePath)</IncludePath>
+    <LibraryPath>.\openssl\lib\x64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
