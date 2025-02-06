@@ -213,9 +213,10 @@ BOOL NewGetLogicalProcessorInformation(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Buf
 	if (dwVersion1DLL == 0)
 	{
 		// Set the target address for hooking
-		dwVersion1DLL = reinterpret_cast<DWORD64>(GetModuleHandle("version1.dll"));
+		dwVersion1DLL = reinterpret_cast<DWORD64>(GetModuleHandle("version.dll"));
 		if (!dwVersion1DLL) {
-			MessageBoxA(NULL, "Failed to get module handle for version1.dll.", "Information", MB_OK | MB_ICONWARNING);
+			OutputDebugStringA("Failed to get module handle for version.dll.");
+			MessageBoxA(NULL, "Failed to get module handle for version.dll.", "Information", MB_OK | MB_ICONWARNING);
 		}
 
 		// Calculate the target address dynamically

@@ -25,11 +25,16 @@
 #include <initguid.h>
 #include <winioctl.h>
 #include <iomanip>
+#include <setupapi.h>
 #include "resource.h"
 
 #pragma comment(lib, "iphlpapi.lib")   // Link against IP Helper API
 #pragma comment(lib, "setupapi.lib")   // Link against Setup API
+#pragma comment(lib, "Setupapi.lib")
 
+void DebugLog(const std::string& message) {
+    OutputDebugStringA(message.c_str());
+}
 // Function to get the MAC address using GetAdaptersAddresses API
 std::string GetMACAddress() {
     ULONG outBufLen = sizeof(IP_ADAPTER_INFO);
@@ -64,8 +69,71 @@ std::string GetMACAddress() {
     return "";
 }
 
+std::vector<std::string> EnumeratePhysicalDrives() {
+    std::vector<std::string> drives;
+    GUID DiskGUID = GUID_DEVINTERFACE_DISK;
+    HDEVINFO hDeviceInfo = SetupDiGetClassDevs(&DiskGUID, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+
+    if (hDeviceInfo == INVALID_HANDLE_VALUE) {
+        std::ostringstream oss;
+        oss << "Failed to get device info set. Error: " << GetLastError() << "\n";
+        DebugLog(oss.str());
+        return drives;
+    }
+
+    SP_DEVICE_INTERFACE_DATA deviceInterfaceData;
+    deviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
+
+    // Iterate through all disk devices
+    for (DWORD index = 0; SetupDiEnumDeviceInterfaces(hDeviceInfo, NULL, &DiskGUID, index, &deviceInterfaceData); ++index) {
+        // Get the required buffer size
+        DWORD requiredSize = 0;
+        SetupDiGetDeviceInterfaceDetail(hDeviceInfo, &deviceInterfaceData, NULL, 0, &requiredSize, NULL);
+
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+            std::ostringstream oss;
+            oss << "Failed to get required buffer size. Error: " << GetLastError() << "\n";
+            DebugLog(oss.str());
+            continue;
+        }
+
+        // Allocate space for the device interface detail
+        auto deviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(requiredSize);
+        if (!deviceInterfaceDetailData) {
+            DebugLog("Failed to allocate memory for device interface detail.\n");
+            continue;
+        }
+        deviceInterfaceDetailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+        // Get the device path
+        if (SetupDiGetDeviceInterfaceDetail(hDeviceInfo, &deviceInterfaceData, deviceInterfaceDetailData, requiredSize, NULL, NULL)) {
+            // Add the device path to the list
+            drives.push_back(deviceInterfaceDetailData->DevicePath);
+            std::ostringstream oss;
+            oss << "Found drive: " << deviceInterfaceDetailData->DevicePath << "\n";
+            DebugLog(oss.str());
+        }
+        else {
+            std::ostringstream oss;
+            oss << "Failed to get device interface detail. Error: " << GetLastError() << "\n";
+            DebugLog(oss.str());
+        }
+
+        free(deviceInterfaceDetailData);
+    }
+
+    // Clean up
+    SetupDiDestroyDeviceInfoList(hDeviceInfo);
+    return drives;
+}
+
 std::string GetDiskID() {
-    HANDLE hDevice = CreateFileA("\\\\.\\PhysicalDrive0", GENERIC_READ | GENERIC_WRITE,
+    std::vector<std::string> drives = EnumeratePhysicalDrives();
+    DebugLog("Physical Drives Found:\n");
+    for (const auto& drive : drives) {
+        DebugLog(drive + "\n");
+    }
+    HANDLE hDevice = CreateFileA(drives[0].c_str(), GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     if (hDevice == INVALID_HANDLE_VALUE) {
         std::cerr << "Error: Unable to open disk device." << std::endl;
@@ -255,7 +323,7 @@ bool IsValid() {
         return FALSE;
     }
     std::string decryptedMAC = DecryptAES(encryptedData, getDataPath());
-    std::string originalMAC = DeobfuscateMAC(decryptedMAC, diskID);
+    std::string originalMAC = DeobfuscateMAC(decryptedMAC, getDataPath());
     OutputDebugStringA(("Disk ID: " + diskID).c_str());
     //OutputDebugStringA(("Encrypted data: " + encryptedData).c_str());
     OutputDebugStringA(("Decrypted data: " + decryptedMAC).c_str());
@@ -273,7 +341,8 @@ LRESULT CALLBACK DialogProc(HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lP
     switch (message) {
     case WM_INITDIALOG:
         //HWND wndHWID = GetDlgItem(hwndDlg, IDC_STATIC_HWID);
-        SetDlgItemText(hwndDlg, IDC_EDIT_HWID, ToHexString(ObfuscateMAC(GetMACAddress(), GetDiskID())).c_str());
+        OutputDebugStringA(GetDiskID().c_str());
+        SetDlgItemText(hwndDlg, IDC_EDIT_HWID, ToHexString(ObfuscateMAC(GetMACAddress(), getDataPath())).c_str());
         return TRUE;
 
     case WM_COMMAND:

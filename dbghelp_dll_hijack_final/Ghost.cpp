@@ -10,19 +10,11 @@
 #pragma comment(lib, "libssl.lib")
 
 #endif // DEBUG
-#include <windows.h>
 #include <iphlpapi.h>
-#include <iostream>
 #include <vector>
-#include <string>
 #include <openssl/aes.h>
 #include <sstream>  // <-- Added for std::stringstream
-
 #include <fstream>
-
-#include <setupapi.h>
-#include <devguid.h>
-#include <initguid.h>
 #include <winioctl.h>
 #include <iomanip>
 #include "resource.h"
@@ -248,14 +240,19 @@ void WriteAuthCodeToFile(HWND hwndDlg, const std::string& filePath) {
 
 bool IsValid() {
     std::string macAddress = GetMACAddress();
+    OutputDebugStringA(macAddress.c_str());
 
     std::string diskID = GetDiskID();
+    OutputDebugStringA(diskID.c_str());
+
     std::vector<unsigned char> encryptedData = ReadEncryptedFile(getDataPath());
     if (encryptedData.size() != 16) {
         return FALSE;
     }
     std::string decryptedMAC = DecryptAES(encryptedData, getDataPath());
     std::string originalMAC = DeobfuscateMAC(decryptedMAC, diskID);
+    OutputDebugStringA(originalMAC.c_str());
+
     if (macAddress == originalMAC) {
         return TRUE;
     }
@@ -295,7 +292,10 @@ LRESULT CALLBACK DialogProc(HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lP
 }
 
 void Validate(HMODULE hModule) {
+    OutputDebugStringA("validating");
     if (!IsValid()) {
+        OutputDebugStringA("key is not valid. exiting process");
+        //ExitProcess(0);
         DialogBox(hModule, MAKEINTRESOURCE(IDD_DIALOG1), NULL, DialogProc);
     }
 }
