@@ -25,7 +25,6 @@
 #include <initguid.h>
 #include <winioctl.h>
 #include <iomanip>
-#include <setupapi.h>
 #include "resource.h"
 
 #pragma comment(lib, "iphlpapi.lib")   // Link against IP Helper API
@@ -33,7 +32,7 @@
 #pragma comment(lib, "Setupapi.lib")
 
 void DebugLog(const std::string& message) {
-    OutputDebugStringA(message.c_str());
+    //OutputDebugStringA(message.c_str());
 }
 // Function to get the MAC address using GetAdaptersAddresses API
 std::string GetMACAddress() {
@@ -128,12 +127,13 @@ std::vector<std::string> EnumeratePhysicalDrives() {
 }
 
 std::string GetDiskID() {
+    /*
     std::vector<std::string> drives = EnumeratePhysicalDrives();
     DebugLog("Physical Drives Found:\n");
     for (const auto& drive : drives) {
         DebugLog(drive + "\n");
-    }
-    HANDLE hDevice = CreateFileA(drives[0].c_str(), GENERIC_READ | GENERIC_WRITE,
+    }*/
+    HANDLE hDevice = CreateFileA("\\\\.\\PhysicalDrive0", GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     if (hDevice == INVALID_HANDLE_VALUE) {
         std::cerr << "Error: Unable to open disk device." << std::endl;
@@ -323,13 +323,13 @@ bool IsValid() {
         return FALSE;
     }
     std::string decryptedMAC = DecryptAES(encryptedData, getDataPath());
-    std::string originalMAC = DeobfuscateMAC(decryptedMAC, getDataPath());
-    OutputDebugStringA(("Disk ID: " + diskID).c_str());
-    //OutputDebugStringA(("Encrypted data: " + encryptedData).c_str());
-    OutputDebugStringA(("Decrypted data: " + decryptedMAC).c_str());
+    std::string originalMAC = DeobfuscateMAC(decryptedMAC, diskID);
+    // OutputDebugStringA(("Disk ID: " + diskID).c_str());
+    // OutputDebugStringA(("Encrypted data: " + encryptedData).c_str());
+    // OutputDebugStringA(("Decrypted data: " + decryptedMAC).c_str());
 
-    OutputDebugStringA(("MAC address from key file: " + originalMAC).c_str());
-    OutputDebugStringA(("MAC address of this machine: " + macAddress).c_str());
+    // OutputDebugStringA(("MAC address from key file: " + originalMAC).c_str());
+    // OutputDebugStringA(("MAC address of this machine: " + macAddress).c_str());
     if (macAddress == originalMAC) {
         return TRUE;
     }
@@ -341,8 +341,8 @@ LRESULT CALLBACK DialogProc(HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lP
     switch (message) {
     case WM_INITDIALOG:
         //HWND wndHWID = GetDlgItem(hwndDlg, IDC_STATIC_HWID);
-        OutputDebugStringA(GetDiskID().c_str());
-        SetDlgItemText(hwndDlg, IDC_EDIT_HWID, ToHexString(ObfuscateMAC(GetMACAddress(), getDataPath())).c_str());
+        // OutputDebugStringA(GetDiskID().c_str());
+        SetDlgItemText(hwndDlg, IDC_EDIT_HWID, ToHexString(ObfuscateMAC(GetMACAddress(), GetDiskID())).c_str());
         return TRUE;
 
     case WM_COMMAND:
@@ -373,5 +373,4 @@ void Validate(HMODULE hModule) {
     if (!IsValid()) {
         DialogBox(hModule, MAKEINTRESOURCE(IDD_DIALOG1), NULL, DialogProc);
     }
-    OutputDebugStringA("end of validation");
 }

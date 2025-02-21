@@ -1,2 +1,3 @@
 # Hook-ModifyHDInformationGet-GetCode-MalwareRemovalProj-
 By hooking DeviceIoControl, RegQueryValueExA, GetLogicalProcessorInformation APIs, mid-function tech and combining assembly code with c++, make fake hardware information to use existing key data of malware.
+Note: In service project, to access devices or files that have some restrictions, it is required to set desired access param from CreateFile API as zero.

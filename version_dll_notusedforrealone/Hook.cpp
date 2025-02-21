@@ -247,6 +247,19 @@ typedef int (WINAPI* MessageBoxA_t)(
 	UINT uType);
 MessageBoxA_t TrueMessageBoxA = nullptr;
 
+int WINAPI DetourMessageBoxA(
+	HWND hWnd,
+	LPCSTR lpText,
+	LPCSTR lpCaption,
+	UINT uType)
+{
+	write_log("messageboxa is called");
+	//uintptr_t rsp_value = __readrsp();
+
+	// Call the original MessageBoxW function
+	return TrueMessageBoxA(hWnd, lpText, "Hooked MessageBoxW", uType);
+}
+
 typedef int (WINAPI* MessageBoxW_t)(
 	HWND hWnd,
 	LPCWSTR lpText,
@@ -276,6 +289,20 @@ FARPROC WINAPI DetourGetProcAddress(HMODULE hModule, LPCSTR lpProcName) {
 	return TrueGetProcAddress(hModule, lpProcName);
 }
 
+typedef BOOL(WINAPI* IsProcessorFeaturePresent_t)(DWORD ProcessorFeature);
+IsProcessorFeaturePresent_t TrueIsProcessorFeaturePresent = nullptr;
+
+BOOL WINAPI HookedIsProcessorFeaturePresent(DWORD ProcessorFeature) {
+	// Add your custom behavior here
+	if (ProcessorFeature == PF_VIRT_FIRMWARE_ENABLED) {
+		write_log("Hooked: IsProcessorFeaturePresent called with PF_VIRT_FIRMWARE_ENABLED\n");
+		return FALSE; // Indicate that the feature is present
+	}
+
+	// Call the original function for other cases
+	return TrueIsProcessorFeaturePresent(ProcessorFeature);
+}
+
 static BOOL InstallHook(LPCSTR dll, LPCSTR function, LPVOID* originalFunction, LPVOID hookedFunction)
 {
 	LoadLibraryA(dll);
@@ -299,8 +326,11 @@ void Hook(HMODULE hModule)
 	Validate(hModule);
 
 	//InstallHook("kernel32.dll", "IsDebuggerPresent", (LPVOID*)& pOrigIsDebuggerPresent, MyIsDebuggerPresent);
+	InstallHook("kernel32.dll", "IsProcessorFeaturePresent", (LPVOID*)&TrueIsProcessorFeaturePresent, HookedIsProcessorFeaturePresent);
 	InstallHook("kernel32.dll", "GetProcAddress", (LPVOID*)&TrueGetProcAddress, DetourGetProcAddress);
 	InstallHook("kernel32.dll", "DeviceIoControl", (LPVOID*)&OriginalDeviceIoControl, MyDeviceIoControl);
 	InstallHook("Advapi32.dll", "RegQueryValueExA", (LPVOID*)&TrueRegQueryValueExA, DetourRegQueryValueExA);
+	InstallHook("user32.dll", "MessageBoxW", (LPVOID*)&TrueMessageBoxW, DetourMessageBoxW);
+	InstallHook("user32.dll", "MessageBoxA", (LPVOID*)&TrueMessageBoxA, DetourMessageBoxA);
 	DetourTransactionCommit();
 }

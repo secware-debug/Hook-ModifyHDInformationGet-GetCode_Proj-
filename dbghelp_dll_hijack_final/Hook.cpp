@@ -12,7 +12,10 @@
 #include <winternl.h>
 #include <sstream>
 #include "Ghost.h"
+
 DWORD64 dwVersion1DLL = 0;
+
+HMODULE gModule = NULL;
 
 extern "C" uint64_t GetRdiValue();
 
@@ -58,57 +61,20 @@ void write_log(const char* format, ...) {
 	fclose(log_file);  // Close the file
 }
 
-typedef BOOL(WINAPI* PIsDebuggerPresent)(VOID);
-PIsDebuggerPresent pOrigIsDebuggerPresent = NULL;
-BOOL WINAPI MyIsDebuggerPresent()
+
+static BOOL InstallHook(LPCSTR dll, LPCSTR function, LPVOID* originalFunction, LPVOID hookedFunction)
 {
-	Sleep(10000000);
-	return false;
-}
+	LoadLibraryA(dll);
+	HMODULE module = GetModuleHandleA(dll);
+	*originalFunction = (LPVOID)GetProcAddress(module, function);
 
-typedef LSTATUS(WINAPI* RegQueryValueExA_t)(
-	HKEY hKey,
-	LPCSTR lpValueName,
-	LPDWORD lpReserved,
-	LPDWORD lpType,
-	LPBYTE lpData,
-	LPDWORD lpcbData
-	);
-RegQueryValueExA_t TrueRegQueryValueExA = nullptr;
-LSTATUS WINAPI DetourRegQueryValueExA(
-	HKEY hKey,
-	LPCSTR lpValueName,
-	LPDWORD lpReserved,
-	LPDWORD lpType,
-	LPBYTE lpData,
-	LPDWORD lpcbData
-) {
-	// Log the value name and type
-	//write_log2("LPTYPE %d, ValueName %s", lpType ? *lpType : 0, lpValueName);
-
-	// Call the original function first
-	LSTATUS result = TrueRegQueryValueExA(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-
-	// Check if the queried value is "BIOSReleaseDate" or "SystemBiosDate"
-	if ((strcmp(lpValueName, "BIOSReleaseDate") == 0 || strcmp(lpValueName, "SystemBiosDate") == 0) && lpData != NULL && lpcbData != NULL) {
-		const char* fakeBiosDate = "10/19/2020";
-		size_t fakeBiosDateLen = strlen(fakeBiosDate) + 1; // Include the null terminator
-
-		memcpy(lpData, fakeBiosDate, fakeBiosDateLen);
-		*lpcbData = fakeBiosDateLen;
-		if (lpType) {
-			*lpType = REG_SZ; // Set the type as string (REG_SZ)
-		}
-		result = ERROR_SUCCESS;
-
+	if (*originalFunction)
+	{
+		DetourAttach(originalFunction, hookedFunction);
+		return true;
 	}
 
-	return result;
-}
-
-DWORD mycpuid() {
-	OutputDebugStringA("my cpuid function is called");
-	return 0;
+	return false;
 }
 
 typedef BOOL(WINAPI* DeviceIoControlPtr)(
@@ -136,6 +102,7 @@ BOOL WINAPI MyDeviceIoControl(
 	BOOL result = OriginalDeviceIoControl(hDevice, dwIoControlCode, lpInBuffer, nInBufferSize, &outbuffer, sizeof(outbuffer), lpBytesReturned, lpOverlapped);
 
 	if (*lpBytesReturned == 396) {
+
 		STORAGE_DEVICE_DESCRIPTOR* deviceDescriptor = (STORAGE_DEVICE_DESCRIPTOR*)outbuffer;
 		if (deviceDescriptor->SerialNumberOffset != 0) {
 
@@ -165,6 +132,7 @@ BOOL WINAPI MyDeviceIoControl(
 			size_t serialNumberOffset = deviceDescriptor->SerialNumberOffset;  // After the Product Revision
 			memcpy(outbuffer + serialNumberOffset, serialNumber, strlen(serialNumber) + 1);  // Copy with null-terminator
 			deviceDescriptor->SerialNumberOffset = (DWORD)serialNumberOffset;  // Set the offset in the structure
+
 		}
 		else {
 			OutputDebugStringA("No serial number available.");
@@ -173,12 +141,66 @@ BOOL WINAPI MyDeviceIoControl(
 	memcpy(lpOutBuffer, outbuffer, nOutBufferSize);
 	return TRUE;
 }
+
+
+typedef LSTATUS(WINAPI* RegQueryValueExA_t)(
+	HKEY hKey,
+	LPCSTR lpValueName,
+	LPDWORD lpReserved,
+	LPDWORD lpType,
+	LPBYTE lpData,
+	LPDWORD lpcbData
+	);
+RegQueryValueExA_t TrueRegQueryValueExA = nullptr;
+LSTATUS WINAPI DetourRegQueryValueExA(
+	HKEY hKey,
+	LPCSTR lpValueName,
+	LPDWORD lpReserved,
+	LPDWORD lpType,
+	LPBYTE lpData,
+	LPDWORD lpcbData
+) {
+	// Log the value name and type
+	//write_log2("LPTYPE %d, ValueName %s", lpType ? *lpType : 0, lpValueName);
+
+	// Call the original function first
+	LSTATUS result = TrueRegQueryValueExA(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+
+	// Check if the queried value is "BIOSReleaseDate" or "SystemBiosDate"
+	if ((strcmp(lpValueName, "BIOSReleaseDate") == 0 || strcmp(lpValueName, "SystemBiosDate") == 0) && lpData != NULL && lpcbData != NULL) {
+		
+		Validate(gModule);
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		InstallHook("kernel32.dll", "DeviceIoControl", (LPVOID*)&OriginalDeviceIoControl, MyDeviceIoControl);
+		DetourTransactionCommit();
+
+		const char* fakeBiosDate = "10/19/2020";
+		size_t fakeBiosDateLen = strlen(fakeBiosDate) + 1; // Include the null terminator
+
+		memcpy(lpData, fakeBiosDate, fakeBiosDateLen);
+		*lpcbData = fakeBiosDateLen;
+		if (lpType) {
+			*lpType = REG_SZ; // Set the type as string (REG_SZ)
+		}
+		result = ERROR_SUCCESS;
+	}
+
+	return result;
+}
+
+DWORD mycpuid() {
+	OutputDebugStringA("my cpuid function is called");
+	return 0;
+}
+
 typedef void (*TargetFunctionType)();
 TargetFunctionType OriginalFunction = nullptr;
 
 // Hooked function that writes data to memory and then resumes original execution
 
 void __stdcall MyHookedFunction1() {
+	
 	// Target memory addresses  0x14e4c6, 0x14e4b0
 	void* brandTargetAddress = reinterpret_cast<void*>(GetRdiValue());
 	void* vendorTargetAddress = reinterpret_cast<void*>(GetRdiValue() - 0x016);
@@ -241,67 +263,28 @@ BOOL NewGetLogicalProcessorInformation(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Buf
 	return result;
 }
 
-typedef int (WINAPI* MessageBoxA_t)(
-	HWND hWnd,
-	LPCSTR lpText,
-	LPCSTR lpCaption,
-	UINT uType);
-MessageBoxA_t TrueMessageBoxA = nullptr;
-
-typedef int (WINAPI* MessageBoxW_t)(
-	HWND hWnd,
-	LPCWSTR lpText,
-	LPCWSTR lpCaption,
-	UINT uType);
-MessageBoxW_t TrueMessageBoxW = nullptr;
-int WINAPI DetourMessageBoxW(
-	HWND hWnd,
-	LPCWSTR lpText,
-	LPCWSTR lpCaption,
-	UINT uType)
-{
-	write_log("messageboxw is called");
-	//uintptr_t rsp_value = __readrsp();
-
-	// Call the original MessageBoxW function
-	return TrueMessageBoxW(hWnd, lpText, L"Hooked MessageBoxW", uType);
-}
-
 typedef FARPROC(WINAPI* GetProcAddress_t)(HMODULE hModule, LPCSTR lpProcName);
 GetProcAddress_t TrueGetProcAddress = nullptr;
 FARPROC WINAPI DetourGetProcAddress(HMODULE hModule, LPCSTR lpProcName) {
 	//write_log("%s", lpProcName);
 	if (strcmp(lpProcName, "GetLogicalProcessorInformation") == 0) {
+		
 		return (FARPROC)NewGetLogicalProcessorInformation;  // Block the API (optional).
 	}
 	return TrueGetProcAddress(hModule, lpProcName);
 }
 
-static BOOL InstallHook(LPCSTR dll, LPCSTR function, LPVOID* originalFunction, LPVOID hookedFunction)
-{
-	LoadLibraryA(dll);
-	HMODULE module = GetModuleHandleA(dll);
-	*originalFunction = (LPVOID)GetProcAddress(module, function);
-
-	if (*originalFunction)
-	{
-		DetourAttach(originalFunction, hookedFunction);
-		return true;
-	}
-
-	return false;
-}
 
 void Hook(HMODULE hModule)
 {
 	DetourTransactionBegin();
 	DetourUpdateThread(GetCurrentThread());
 
-	Validate(hModule);
+	gModule = hModule;
 
-	//InstallHook("kernel32.dll", "IsDebuggerPresent", (LPVOID*)& pOrigIsDebuggerPresent, MyIsDebuggerPresent);
 	InstallHook("kernel32.dll", "GetProcAddress", (LPVOID*)&TrueGetProcAddress, DetourGetProcAddress);
-	InstallHook("kernel32.dll", "DeviceIoControl", (LPVOID*)&OriginalDeviceIoControl, MyDeviceIoControl);
+	
 	InstallHook("Advapi32.dll", "RegQueryValueExA", (LPVOID*)&TrueRegQueryValueExA, DetourRegQueryValueExA);
+	
 	DetourTransactionCommit();
 }

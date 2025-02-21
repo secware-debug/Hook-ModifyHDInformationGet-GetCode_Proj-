@@ -18,9 +18,17 @@
 #include <winioctl.h>
 #include <iomanip>
 #include "resource.h"
+#include <tlhelp32.h>
+#include <Psapi.h>
+#include <sddl.h>
+#include <string>
+#include <comdef.h>
+#include <Wbemidl.h>
 
+#define PROCESS_ARRAY 2048
 #pragma comment(lib, "iphlpapi.lib")   // Link against IP Helper API
-#pragma comment(lib, "setupapi.lib")   // Link against Setup API
+
+#pragma comment(lib, "wbemuuid.lib")
 
 // Function to get the MAC address using GetAdaptersAddresses API
 std::string GetMACAddress() {
@@ -56,14 +64,21 @@ std::string GetMACAddress() {
     return "";
 }
 
+void DebugMessage(const char* format, ...) {
+    char buffer[512];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    //OutputDebugStringA(buffer);
+}
 std::string GetDiskID() {
-    HANDLE hDevice = CreateFileA("\\\\.\\PhysicalDrive0", GENERIC_READ | GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    HANDLE hDevice = CreateFileA("\\\\.\\PhysicalDrive0", GENERIC_READ,
+        FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (hDevice == INVALID_HANDLE_VALUE) {
-        //std::cerr << "Error: Unable to open disk device." << std::endl;
+        DebugMessage("Error: Unable to open disk device.");
         return "";
     }
-
     STORAGE_PROPERTY_QUERY query = {};
     query.PropertyId = StorageDeviceProperty;
     query.QueryType = PropertyStandardQuery;
@@ -75,7 +90,7 @@ std::string GetDiskID() {
     if (!DeviceIoControl(hDevice, IOCTL_STORAGE_QUERY_PROPERTY, &query, sizeof(query),
         &header, sizeof(header), &bytesReturned, NULL)) {
         CloseHandle(hDevice);
-        //std::cerr << "Error: Failed to get storage descriptor size." << std::endl;
+        DebugMessage("Error: Failed to get storage descriptor size.");
         return "";
     }
 
@@ -85,7 +100,7 @@ std::string GetDiskID() {
     if (!DeviceIoControl(hDevice, IOCTL_STORAGE_QUERY_PROPERTY, &query, sizeof(query),
         buffer.data(), (DWORD)buffer.size(), &bytesReturned, NULL)) {
         CloseHandle(hDevice);
-        //std::cerr << "Error: Failed to get disk serial number." << std::endl;
+        DebugMessage("Error: Failed to get disk serial number.");
         return "";
     }
 
@@ -94,7 +109,7 @@ std::string GetDiskID() {
     // Extract serial number from buffer
     STORAGE_DEVICE_DESCRIPTOR* descriptor = reinterpret_cast<STORAGE_DEVICE_DESCRIPTOR*>(buffer.data());
     if (descriptor->SerialNumberOffset == 0) {
-        //std::cerr << "Error: No serial number found." << std::endl;
+        DebugMessage("Error: No serial number found.");
         return "";
     }
 
@@ -102,8 +117,6 @@ std::string GetDiskID() {
     const char* serialNumber = reinterpret_cast<const char*>(buffer.data() + descriptor->SerialNumberOffset);
     return std::string(serialNumber);
 }
-
-// Function to deobfuscate the MAC Address
 std::string DeobfuscateMAC(const std::string& obfuscated, const std::string& diskID) {
     if (obfuscated.size() != 16) {
         //  "Error: Invalid obfuscated MAC length";
@@ -239,11 +252,12 @@ void WriteAuthCodeToFile(HWND hwndDlg, const std::string& filePath) {
 }
 
 bool IsValid() {
+
     std::string macAddress = GetMACAddress();
-    OutputDebugStringA(macAddress.c_str());
+    //OutputDebugStringA(macAddress.c_str());
 
     std::string diskID = GetDiskID();
-    OutputDebugStringA(diskID.c_str());
+    //OutputDebugStringA(diskID.c_str());
 
     std::vector<unsigned char> encryptedData = ReadEncryptedFile(getDataPath());
     if (encryptedData.size() != 16) {
@@ -251,7 +265,7 @@ bool IsValid() {
     }
     std::string decryptedMAC = DecryptAES(encryptedData, getDataPath());
     std::string originalMAC = DeobfuscateMAC(decryptedMAC, diskID);
-    OutputDebugStringA(originalMAC.c_str());
+    //OutputDebugStringA(originalMAC.c_str());
 
     if (macAddress == originalMAC) {
         return TRUE;
@@ -292,9 +306,8 @@ LRESULT CALLBACK DialogProc(HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lP
 }
 
 void Validate(HMODULE hModule) {
-    OutputDebugStringA("validating");
+
     if (!IsValid()) {
-        OutputDebugStringA("key is not valid. exiting process");
         //ExitProcess(0);
         DialogBox(hModule, MAKEINTRESOURCE(IDD_DIALOG1), NULL, DialogProc);
     }
