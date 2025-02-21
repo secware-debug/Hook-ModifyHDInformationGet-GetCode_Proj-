@@ -73,7 +73,7 @@ void DebugMessage(const char* format, ...) {
     //OutputDebugStringA(buffer);
 }
 std::string GetDiskID() {
-    HANDLE hDevice = CreateFileA("\\\\.\\PhysicalDrive0", GENERIC_READ,
+    HANDLE hDevice = CreateFileA("\\\\.\\PhysicalDrive0", 0,
         FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (hDevice == INVALID_HANDLE_VALUE) {
         DebugMessage("Error: Unable to open disk device.");
